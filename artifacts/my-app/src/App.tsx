@@ -74,12 +74,17 @@ import {
 } from 'lucide-react';
 
 // --- Konfigurasi Firebase ---
-const firebaseConfig = (typeof __firebase_config !== 'undefined' && __firebase_config) ? JSON.parse(__firebase_config) : { apiKey: "", authDomain: "", projectId: "", storageBucket: "", messagingSenderId: "", appId: "" };
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'sales-absen-agro';
+const _rawConfig = (typeof __firebase_config !== 'undefined' && __firebase_config)
+  ? (() => { try { return JSON.parse(__firebase_config); } catch { return null; } })()
+  : null;
 
+const hasValidFirebaseConfig = !!(_rawConfig?.apiKey);
+
+const firebaseConfig = _rawConfig || { apiKey: '', authDomain: '', projectId: '', storageBucket: '', messagingSenderId: '', appId: '' };
+const app = hasValidFirebaseConfig ? initializeApp(firebaseConfig) : null as any;
+const auth = hasValidFirebaseConfig ? getAuth(app) : null as any;
+const db = hasValidFirebaseConfig ? getFirestore(app) : null as any;
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'sales-absen-agro';
 // --- Global Constants ---
 const ColorMap = {
   emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100',
@@ -387,19 +392,26 @@ const App = () => {
 
   // --- Auth & Data Sync ---
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
-        else await signInAnonymously(auth);
-      } catch (err) { console.error("Auth error:", err); }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, (u) => setUser(u));
-    return () => unsubscribe();
+    if (!hasValidFirebaseConfig || !auth) { setIsLoading(false); return; }
+    let unsubscribe: (() => void) | null = null;
+    try {
+      const initAuth = async () => {
+        try {
+          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
+          else await signInAnonymously(auth);
+        } catch (err) { console.error('Auth error:', err); }
+      };
+      initAuth();
+      unsubscribe = onAuthStateChanged(auth, (u) => setUser(u));
+    } catch (err) {
+      console.error('Firebase setup error:', err);
+      setIsLoading(false);
+    }
+    return () => { if (unsubscribe) unsubscribe(); };
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    if (!hasValidFirebaseConfig || !user) return;
     const unsubTeams = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'teams'), (snap) => setTeams(snap.docs.map(d => ({ id: d.id, name: d.data().name })).sort((a,b) => a.name.localeCompare(b.name))));
     const unsubEmp = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'employees'), (snap) => setEmployees(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubRec = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'records'), (snap) => setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
@@ -522,6 +534,23 @@ const App = () => {
     </header>
   );
 
+  if (!hasValidFirebaseConfig) return (
+    <div className="min-h-screen bg-emerald-50 flex items-center justify-center p-6">
+      <div className="bg-white rounded-3xl shadow-xl p-8 max-w-sm w-full text-center space-y-4 border border-emerald-100">
+        <Sprout className="w-12 h-12 text-emerald-600 mx-auto" />
+        <h1 className="text-xl font-black text-slate-800">Firebase Belum Dikonfigurasi</h1>
+        <p className="text-sm text-slate-500">App ini membutuhkan konfigurasi Firebase. Hubungi administrator untuk mendapatkan file konfigurasi Firebase (<code className="bg-slate-100 px-1 rounded text-xs">__firebase_config</code>).</p>
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-left text-xs text-amber-800 space-y-1">
+          <p className="font-black">Yang dibutuhkan:</p>
+          <ul className="list-disc list-inside space-y-1">
+            <li>Firebase Project API Key</li>
+            <li>Auth Domain & Project ID</li>
+            <li>Firestore Database aktif</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
   if (isLoading) return <div className="min-h-screen bg-emerald-50 flex items-center justify-center text-center"><div className="space-y-4"><Sprout className="w-16 h-16 text-emerald-700 animate-bounce mx-auto" /><p className="text-emerald-800 font-black uppercase text-xs tracking-widest">Loading Database...</p></div></div>;
 
   return (
