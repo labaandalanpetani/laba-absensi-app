@@ -78,12 +78,20 @@ const _rawConfig = (typeof __firebase_config !== 'undefined' && __firebase_confi
   ? (() => { try { return JSON.parse(__firebase_config); } catch { return null; } })()
   : null;
 
-const hasValidFirebaseConfig = !!(_rawConfig?.apiKey);
+const firebaseConfig = _rawConfig || {
+  apiKey: 'AIzaSyCLwp5S5P2-7DcKG74de3UnqTxZLZqlXBQ',
+  authDomain: 'laba-absensi.firebaseapp.com',
+  projectId: 'laba-absensi',
+  storageBucket: 'laba-absensi.firebasestorage.app',
+  messagingSenderId: '662432139857',
+  appId: '1:662432139857:web:9a99202ac7fa9f4e1a0670',
+  measurementId: 'G-34VTFGB3Y7'
+};
 
-const firebaseConfig = _rawConfig || { apiKey: '', authDomain: '', projectId: '', storageBucket: '', messagingSenderId: '', appId: '' };
-const app = hasValidFirebaseConfig ? initializeApp(firebaseConfig) : null as any;
-const auth = hasValidFirebaseConfig ? getAuth(app) : null as any;
-const db = hasValidFirebaseConfig ? getFirestore(app) : null as any;
+const hasValidFirebaseConfig = !!(firebaseConfig.apiKey);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'sales-absen-agro';
 // --- Global Constants ---
 const ColorMap = {
@@ -411,7 +419,8 @@ const App = () => {
   }, []);
 
   useEffect(() => {
-    if (!hasValidFirebaseConfig || !user) return;
+    if (!hasValidFirebaseConfig) return;
+    if (!user) { setIsLoading(false); return; }
     const unsubTeams = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'teams'), (snap) => setTeams(snap.docs.map(d => ({ id: d.id, name: d.data().name })).sort((a,b) => a.name.localeCompare(b.name))));
     const unsubEmp = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'employees'), (snap) => setEmployees(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubRec = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'records'), (snap) => setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
